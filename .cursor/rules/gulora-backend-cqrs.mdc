@@ -1,0 +1,145 @@
+---
+description: Gülora Application layer — CQRS, MediatR, FluentValidation, AutoMapper qaydaları
+globs: **/Application/**/*.cs
+alwaysApply: false
+---
+
+# Application Layer — CQRS & MediatR Qaydaları
+
+## Qovluq Strukturu
+
+```
+Application/
+  Auth/
+    Commands/Login/       → LoginCommand.cs, LoginCommandHandler.cs, LoginCommandValidator.cs
+    Commands/Register/
+    Queries/GetMe/
+  Orders/
+    Commands/CreateOrder/
+    Commands/RequestReturn/
+    Queries/GetOrders/
+    Queries/GetOrderById/
+  Products/
+    Queries/GetProducts/
+    Queries/GetProductBySlug/
+    Queries/SearchProducts/
+  ...
+```
+
+Hər use-case öz qovluğundadır. Command, Handler, Validator eyni qovluqda.
+
+## Command / Query Strukturu
+
+```csharp
+// ✅ DÜZGÜN — record, IRequest<T>
+public record CreateOrderCommand(
+    Guid UserId,
+    List<OrderItemRequest> Items,
+    AddressSnapshot Address,
+    DeliveryType DeliveryType,
+    PaymentMethod PaymentMethod,
+    string? CouponCode
+) : IRequest<OrderDto>;
+
+// Query — oxuma əməliyyatları
+public record GetOrderByIdQuery(Guid OrderId, Guid UserId) : IRequest<OrderDto>;
+```
+
+## Handler Strukturu
+
+```csharp
+public sealed class CreateOrderCommandHandler
+    : IRequestHandler<CreateOrderCommand, OrderDto>
+{
+    private readonly IOrderRepository _orders;
+    private readonly IProductRepository _products;
+    private readonly IMapper _mapper;
+
+    public CreateOrderCommandHandler(
+        IOrderRepository orders, IProductRepository products, IMapper mapper)
+    { _orders = orders; _products = products; _mapper = mapper; }
+
+    public async Task<OrderDto> Handle(CreateOrderCommand cmd, CancellationToken ct)
+    {
+        // 1. Domain doğrulama
+        // 2. Entity yarat
+        // 3. Repository saxla
+        // 4. DTO qaytar
+        var order = Order.Create(cmd.UserId, totalAmount);
+        await _orders.AddAsync(order, ct);
+        return _mapper.Map<OrderDto>(order);
+    }
+}
+```
+
+## FluentValidation
+
+```csharp
+public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
+{
+    public CreateOrderCommandValidator()
+    {
+        RuleFor(x => x.UserId).NotEmpty();
+        RuleFor(x => x.Items).NotEmpty().WithMessage("Sifariş boş ola bilməz.");
+        RuleForEach(x => x.Items).ChildRules(item =>
+        {
+            item.RuleFor(i => i.ProductId).NotEmpty();
+            item.RuleFor(i => i.Quantity).GreaterThan(0);
+        });
+        RuleFor(x => x.Address).NotNull();
+    }
+}
+```
+
+`ValidationBehavior<TRequest, TResponse>` pipeline behavior ilə MediatR-ə qoşulur — controller-də manual validation yoxdur.
+
+## AutoMapper Profiles
+
+```csharp
+// Application/Mappings/OrderMappingProfile.cs
+public class OrderMappingProfile : Profile
+{
+    public OrderMappingProfile()
+    {
+        CreateMap<Order, OrderDto>()
+            .ForMember(d => d.StatusLabel, o => o.MapFrom(s => s.Status.ToString()))
+            .ForMember(d => d.Items, o => o.MapFrom(s => s.Items));
+
+        CreateMap<OrderItem, OrderItemDto>();
+    }
+}
+```
+
+## Pipeline Behaviors (MediatR)
+
+```
+ValidationBehavior      → FluentValidation icra edir
+LoggingBehavior         → Hər command/query üçün log
+TransactionBehavior     → Command-lər üçün DB transaction
+```
+
+```csharp
+// Application/Common/Behaviors/ValidationBehavior.cs
+public class ValidationBehavior<TRequest, TResponse>
+    : IPipelineBehavior<TRequest, TResponse>
+    where TRequest : IRequest<TResponse>
+{
+    private readonly IEnumerable<IValidator<TRequest>> _validators;
+    // Handle: validators çalışdır, ValidationException at
+}
+```
+
+## Repository Interface-ləri
+
+Repository interface-ləri `Application` layerindədir, implementasiya `Infrastructure`-dadır:
+
+```csharp
+// Application/Common/Interfaces/IOrderRepository.cs
+public interface IOrderRepository
+{
+    Task<Order?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<IReadOnlyList<Order>> GetByUserIdAsync(Guid userId, CancellationToken ct = default);
+    Task AddAsync(Order order, CancellationToken ct = default);
+    Task SaveChangesAsync(CancellationToken ct = default);
+}
+```

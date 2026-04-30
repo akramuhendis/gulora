@@ -1,0 +1,141 @@
+---
+description: Gülora Infrastructure layer — EF Core, Repository, JWT, migration qaydaları
+globs: **/Infrastructure/**/*.cs, **/Persistence/**/*.cs
+alwaysApply: false
+---
+
+# Infrastructure Layer — EF Core & Repository Qaydaları
+
+## DbContext
+
+```csharp
+// Infrastructure/Persistence/GuloraDbContext.cs
+public class GuloraDbContext(DbContextOptions<GuloraDbContext> options)
+    : DbContext(options)
+{
+    public DbSet<User>              Users              => Set<User>();
+    public DbSet<RefreshToken>      RefreshTokens      => Set<RefreshToken>();
+    public DbSet<Category>          Categories         => Set<Category>();
+    public DbSet<Product>           Products           => Set<Product>();
+    public DbSet<Order>             Orders             => Set<Order>();
+    public DbSet<OrderItem>         OrderItems         => Set<OrderItem>();
+    public DbSet<OrderTracking>     OrderTrackings     => Set<OrderTracking>();
+    public DbSet<Address>           Addresses          => Set<Address>();
+    public DbSet<Favorite>          Favorites          => Set<Favorite>();
+    public DbSet<Review>            Reviews            => Set<Review>();
+    public DbSet<Coupon>            Coupons            => Set<Coupon>();
+    public DbSet<CorporateInquiry>  CorporateInquiries => Set<CorporateInquiry>();
+    public DbSet<SellerApplication> SellerApplications => Set<SellerApplication>();
+
+    protected override void OnModelCreating(ModelBuilder mb)
+        => mb.ApplyConfigurationsFromAssembly(typeof(GuloraDbContext).Assembly);
+}
+```
+
+## Entity Configuration (Fluent API)
+
+Hər entity üçün ayrı `IEntityTypeConfiguration<T>` — `OnModelCreating`-ə yazmaq olmaz:
+
+```csharp
+// Infrastructure/Persistence/Configurations/ProductConfiguration.cs
+public class ProductConfiguration : IEntityTypeConfiguration<Product>
+{
+    public void Configure(EntityTypeBuilder<Product> b)
+    {
+        b.HasKey(p => p.Id);
+        b.Property(p => p.Name).HasMaxLength(200).IsRequired();
+        b.Property(p => p.Slug).HasMaxLength(200).IsRequired();
+        b.HasIndex(p => p.Slug).IsUnique();
+        b.Property(p => p.Price).HasPrecision(18, 2);
+        b.Property(p => p.OriginalPrice).HasPrecision(18, 2);
+        // Array sahələr JSON-a serialization
+        b.Property(p => p.Images).HasConversion(
+            v => JsonSerializer.Serialize(v, default(JsonSerializerOptions)),
+            v => JsonSerializer.Deserialize<List<string>>(v, default(JsonSerializerOptions))!);
+
+        b.HasOne<Category>().WithMany().HasForeignKey(p => p.CategoryId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+```
+
+## Repository Implementasiyası
+
+```csharp
+// Infrastructure/Persistence/Repositories/OrderRepository.cs
+public class OrderRepository(GuloraDbContext db) : IOrderRepository
+{
+    public async Task<Order?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        await db.Orders
+            .Include(o => o.Items)
+            .Include(o => o.Tracking)
+            .FirstOrDefaultAsync(o => o.Id == id, ct);
+
+    public async Task<IReadOnlyList<Order>> GetByUserIdAsync(Guid userId, CancellationToken ct = default) =>
+        await db.Orders
+            .Where(o => o.UserId == userId)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync(ct);
+
+    public async Task AddAsync(Order order, CancellationToken ct = default) =>
+        await db.Orders.AddAsync(order, ct);
+
+    public async Task SaveChangesAsync(CancellationToken ct = default) =>
+        await db.SaveChangesAsync(ct);
+}
+```
+
+## Migration Qaydaları
+
+```bash
+# Yeni migration əlavə et
+dotnet ef migrations add <MigrationName> --project Gülora.Infrastructure --startup-project Gülora.API
+
+# Verilənlər bazasını yenilə
+dotnet ef database update --project Gülora.Infrastructure --startup-project Gülora.API
+```
+
+- Migration adları: `AddOrderTracking`, `AddCouponUsageLimit`, `CreateInitialSchema`
+- Heç vaxt əl ilə migration faylı redaktə etmə.
+- `dotnet ef migrations remove` — son migration-u geri al.
+
+## JWT Service
+
+```csharp
+// Infrastructure/Identity/JwtService.cs
+public class JwtService(IOptions<JwtSettings> settings) : IJwtService
+{
+    public string GenerateAccessToken(User user)
+    {
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Role, user.Role.ToString()),
+            new Claim(ClaimTypes.GivenName, user.FirstName),
+        };
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.Value.Secret));
+        var token = new JwtSecurityToken(
+            issuer: settings.Value.Issuer,
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(settings.Value.AccessTokenMinutes),
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    public string GenerateRefreshToken() =>
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+}
+```
+
+## Soft Delete
+
+`User` entity-si üçün fiziki silmə yoxdur — `IsActive = false`:
+
+```csharp
+// Bütün User sorğularında filter tətbiq et
+b.HasQueryFilter(u => u.IsActive);
+```
+
+## Seeding
+
+Kateqoriya və test məhsulları `DataSeeder.cs` ilə `IHostedService` kimi işə salınır, yalnız `Development` mühitində.

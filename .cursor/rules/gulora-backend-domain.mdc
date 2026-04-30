@@ -1,0 +1,116 @@
+---
+description: Gülora Domain layer — Entity, Value Object və enum qaydaları
+globs: **/Domain/**/*.cs
+alwaysApply: false
+---
+
+# Domain Layer Qaydaları
+
+## Entity Əsas Sinifi
+
+Bütün entity-lər `BaseEntity`-dən irsi alır:
+
+```csharp
+// Domain/Common/BaseEntity.cs
+public abstract class BaseEntity
+{
+    public Guid Id { get; protected set; } = Guid.NewGuid();
+    public DateTime CreatedAt { get; protected set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; protected set; }
+
+    protected void SetUpdated() => UpdatedAt = DateTime.UtcNow;
+}
+```
+
+## Entity Strukturu
+
+- Sahələr `private set` — xarici kod birbaşa dəyər təyin edə bilməz.
+- Dəyişiklik üçün domain metodları (eg. `Confirm()`, `Cancel()`, `ApplyDiscount()`).
+- Konstruktor validasiyası: null/boş dəyər qəbul etmə, `ArgumentException` at.
+
+```csharp
+// ✅ DÜZGÜN
+public class Order : BaseEntity
+{
+    public Guid UserId { get; private set; }
+    public OrderStatus Status { get; private set; }
+    public decimal TotalAmount { get; private set; }
+    private readonly List<OrderItem> _items = [];
+    public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
+
+    private Order() { } // EF Core üçün
+
+    public static Order Create(Guid userId, decimal totalAmount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(totalAmount);
+        return new Order { UserId = userId, TotalAmount = totalAmount, Status = OrderStatus.Pending };
+    }
+
+    public void Confirm() 
+    {
+        if (Status != OrderStatus.Pending)
+            throw new DomainException("Yalnız gözləmədə olan sifariş təsdiq edilə bilər.");
+        Status = OrderStatus.Confirmed;
+        SetUpdated();
+    }
+}
+
+// ❌ YANLIŞ — public set, no protection
+public class Order { public OrderStatus Status { get; set; } }
+```
+
+## Enum-lar
+
+```csharp
+// Domain/Enums/OrderStatus.cs
+public enum OrderStatus
+{
+    Pending = 0,
+    Confirmed = 1,
+    Preparing = 2,
+    Shipped = 3,
+    Delivered = 4,
+    Cancelled = 5,
+    ReturnRequested = 6,
+    Returned = 7
+}
+
+public enum DeliveryType { Standard, SameDay, Scheduled }
+public enum PaymentMethod { Card, CashOnDelivery, BankTransfer }
+public enum DiscountType { Percent, Fixed }
+public enum UserRole { Customer, Admin, Seller }
+```
+
+## Value Object-lər
+
+Dəyər obyektləri `record` ilə:
+
+```csharp
+// Domain/ValueObjects/Money.cs
+public record Money(decimal Amount, string Currency = "AZN")
+{
+    public static Money Zero => new(0);
+    public Money Add(Money other) => this with { Amount = Amount + other.Amount };
+}
+
+// Domain/ValueObjects/AddressSnapshot.cs — Order-da JSON saxlanılır
+public record AddressSnapshot(
+    string RecipientName, string RecipientPhone,
+    string City, string District, string Line, string PostalCode);
+```
+
+## Domain Exception-ları
+
+```csharp
+// Domain/Exceptions/DomainException.cs
+public class DomainException(string message) : Exception(message);
+
+// Domain/Exceptions/NotFoundException.cs
+public class NotFoundException(string entity, object key)
+    : Exception($"{entity} (id: {key}) tapılmadı.");
+```
+
+## Qeydlər
+
+- Domain layer-də EF Core, MediatR, FluentValidation, HTTP referansı olmayacaq.
+- `Domain/Entities/`, `Domain/Enums/`, `Domain/ValueObjects/`, `Domain/Exceptions/` qovluq strukturunu qoru.

@@ -1,0 +1,77 @@
+---
+description: Gülora ASP.NET Core Web API — Əsas arxitektura qaydaları
+alwaysApply: true
+---
+
+# Gülora Backend — Əsas Arxitektura Qaydaları
+
+## Layihə Strukturu
+
+Həmişə Clean Architecture layerlərini qoru:
+
+```
+Gülora.API/            → Controllers, Middleware, Program.cs
+Gülora.Application/    → CQRS Commands/Queries, Validators, Mappings
+Gülora.Domain/         → Entities, Value Objects, Enums, Domain Events
+Gülora.Infrastructure/ → EF Core, JWT, Email, SMS, Payment adapters
+Gülora.Contracts/      → DTOs, Request/Response types
+```
+
+**Layer asılılıq qaydası:** API → Application → Domain. Infrastructure → Domain. Heç bir layer üstündəki layeri import etmir.
+
+## Adlandırma Qaydaları
+
+| Element | Format | Nümunə |
+|---|---|---|
+| Controller | `{Entity}Controller` | `OrdersController` |
+| Command | `{Action}{Entity}Command` | `CreateOrderCommand` |
+| Query | `Get{Entity}Query` | `GetOrderByIdQuery` |
+| Handler | `{Command/Query}Handler` | `CreateOrderCommandHandler` |
+| Validator | `{Command/Query}Validator` | `CreateOrderCommandValidator` |
+| DTO (cavab) | `{Entity}Dto` | `OrderDto` |
+| Request | `{Action}{Entity}Request` | `CreateOrderRequest` |
+
+## Dil Qaydaları
+
+- Bütün Azerbaycanca UI mətnləri yalnız `Contracts` DTO-larında, client-ə göndərilən `message` sahələrindədir.
+- C# kod, dəyişən, sinif adları ingilis dilindədir.
+- Exception mesajları ingilis dilindədir; `ProblemDetails.title` sahəsi Azerbaycancaya çevrilə bilər.
+
+## Xəta İdarəetməsi
+
+`GlobalExceptionMiddleware` bütün unhandled exception-ları tutur və standart `ProblemDetails` (RFC 7807) formatında qaytarır:
+
+```csharp
+// ✅ DÜZGÜN — domain exception atın, controller-də try/catch yoxdur
+public async Task<ActionResult<OrderDto>> CreateOrder(...)
+{
+    var result = await _mediator.Send(command);
+    return Ok(result);
+}
+
+// ❌ YANLIŞ — controller-də try/catch
+public async Task<ActionResult<OrderDto>> CreateOrder(...)
+{
+    try { ... }
+    catch (Exception ex) { return BadRequest(ex.Message); }
+}
+```
+
+## Dependency Injection
+
+- Interfeys üzərindən DI istifadə et, konkret sinif inject etmə.
+- `Infrastructure` layerindəki bütün xidmətlər `IServiceCollection` extension metodları ilə (`AddInfrastructure`) qeydiyyata alınır.
+- `Application` layeri `AddApplication()` extension ilə register olunur.
+
+## Appsettings
+
+```json
+{
+  "ConnectionStrings": { "DefaultConnection": "..." },
+  "Jwt": { "Secret": "...", "Issuer": "gulora.az", "AccessTokenMinutes": 15, "RefreshTokenDays": 7 },
+  "Email": { "SmtpHost": "...", "Port": 587, "From": "noreply@gulora.az" },
+  "Cors": { "AllowedOrigins": ["http://localhost:5173", "https://gulora.az"] }
+}
+```
+
+Heç vaxt secret dəyərləri `appsettings.json`-a yaz; `appsettings.Development.json` və ya User Secrets istifadə et.
