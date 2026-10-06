@@ -1,0 +1,50 @@
+---
+description: Gülora güvenlik ve hassas veri için üst düzey gereksinimler
+globs: backend/src/Gulora.API/**/*.cs,backend/src/Gulora.Infrastructure/**/*.cs,backend/src/Gulora.Application/**/*.cs
+alwaysApply: false
+---
+
+# Güvenlik ve hassas veri
+
+## Yapılandırma ve sırlar
+- Hiçbir API anahtarı, DB parolası, JWT `SigningKey` repoda sabit string olarak yazılmaz.
+- Development: `dotnet user-secrets`, Production: ortam değişkenleri veya güvenli kasa. `appsettings.Development.json` içinde yalnızca **güvenli** varsayılanlar.
+
+## Ağ ve taşıma
+- Production’da **HTTPS** zorunlu; HSTS API tarafında düşünülür (ters proxy ile uyumlu).
+- CORS yalnızca bilinen origin listesi; `AllowAnyOrigin` + `AllowCredentials` **birlikte** kullanılmaz.
+
+## Auth ve oturum
+- Access token kısa ömür; refresh token httpOnly, Secure, SameSite uygun cookie öznitelikleri ile.
+- Parola yalnızca BCrypt (veya seçilen tek hash) ile saklanır; düz metin loglanmaz.
+
+## Yetkilendirme — katmanlar
+- **Kimlik doğrulama (401):** JWT middleware + `[Authorize]` — “token geçerli, kimlik bilinir”.
+- **Genel rol/policy:** ASP.NET **policy** veya `[Authorize(Roles = "Admin")]` controller/aksiyon üzerinden önceden kapatılan uçlar (ör. admin paneli).
+- **Kaynak düzeyi (“bu sipariş benim”):** karar **Application handler** veya Domain metodundadır; uyumsuzlukta `ForbiddenException`. Controller’da uzun `if` zincirleri yok, handler tek kaynak.
+- Policy adlarını (`Orders.ManageOwn`) tek listede tutun; yinelenen kontroller için ortak yardımcı veya domain servisi.
+
+## Girdi doğrulama ve kötüye kullanım
+- Tüm kullanıcı girdileri **FluentValidation** veya model state ile doğrulanır; güvenlik kararları (ör. “bu sipariş bana aitse”) Application/Domain’de, yalnızca “kimlik doğrulandı mı” API katmanında.
+- Rate limiting (ör. `FixedWindow` / `SlidingWindow`) login ve OTP endpoint’leri için önerilir — uygulama API/Infrastructure.
+
+## Loglar ve hatalar
+- Serilog veya başka logger ile **PII** (parola, tam kart numarası, refresh token) yazılmaz.
+- Kullanıcıya dönen hata mesajları ayrıntılı stack trace ve iç path açmaz; `ProblemDetails` ile kontrollü mesaj.
+
+## Bağımlılıklar ve dosyalar
+- NuGet paketleri düzenli güncellenir; şüpheli betikler yoktur.
+- Kullanıcı yüklemeleri: **izin verilen MIME/boyut whitelist**, rastgele dosya adı, depolama web kökü dışında, mümkünse **imzalı indirme**; virüs taraması gerekirse Infrastructure — ayrıntılı depolama akışı `gulora-infrastructure-contracts.mdc`.
+
+## KVKK ve kişisel veri (yüksek seviye)
+- Toplama amacı, saklama süresi, silme/düzeltme talepleri ve veri işleme kayıtları ürün/hukuk ile uyumlu tutulur; log ve analitikte gereksiz **PII** tutulmaz, gerekirse maskeleme Application/handler sınırında. Operasyonel runbook ekip wiki veya dahili dokümanda.
+
+## Webhook ve dış geri çağrılar (yüksek seviye)
+- Üçüncü parti webhook uçları: imza veya paylaşılan sır ile **doğrulama** zorunlu; zaman damgası/replay penceresi mümkünse uygulanır. Ham gövde hash’i gerekiyorsa middleware sırası dokümante edilir.
+
+## JSON ve CSRF
+- SPA + JWT Bearer için klasik CSRF çerezi yoktur; çerez tabanlı oturum eklenirse anti-forgery ilkesi ayrıca tanımlanmalıdır.
+
+## İlgili kurallar
+- CI’da sırların yönetimi, prod HTTPS, dal: `gulora-devops-ci.mdc`
+- Genel güvenlik özeti: `gulora-architecture.mdc`

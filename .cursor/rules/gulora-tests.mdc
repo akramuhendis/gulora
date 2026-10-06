@@ -1,0 +1,73 @@
+---
+description: Gülora test stratejisi — Backend (xUnit), frontend (Vitest/RTL/E2E)
+globs: '**/Gulora.Domain.Tests/**/*.cs,**/Gulora.Application.Tests/**/*.cs,**/Gulora.Integration.Tests/**/*.cs,frontend/**/*.test.ts,frontend/**/*.test.tsx,frontend/**/*.spec.ts,frontend/**/*.spec.tsx,frontend/e2e/**/*.ts,frontend/e2e/**/*.tsx,frontend/vitest.config.ts,frontend/vitest.config.mts,frontend/playwright.config.ts,frontend/src/test/**/*.ts,frontend/src/test/**/*.tsx'
+alwaysApply: false
+---
+
+# Test kuralları
+
+## Backend — teknoloji
+- **xUnit** + `FluentAssertions` (isteğe bağlı) + `NSubstitute` / `Moq` (proje seçimiyle tek tip).
+- Integration: `WebApplicationFactory<Program>` (veya minimal API için uygun factory), gerçek PostgreSQL yerine testte **Testcontainers** veya **SQLite in-memory** — takım seçimini bir kez belgeleyin ve değiştirmeyin.
+
+## Klasör ve adlandırma
+- Proje adları: `Gulora.Domain.Tests`, `Gulora.Application.Tests`, `Gulora.Integration.Tests` (çözüm yapısı ile aynı).
+- Dosya: `{ClassUnderTest}Tests.cs` (ör. `OrderTests.cs`, `CreateOrderCommandHandlerTests.cs`).
+- Metot: `MethodName_Scenario_ExpectedOutcome` veya `Should_ExpectedBehavior_When_State`.
+
+## Domain.Tests
+- Aggregate davranışı, value object, domain olayı toplanması.
+- EF, MediatR, dosya sistemi **yok** — saf birim testleri.
+
+## Application.Tests
+- Handler’lar: sahte (mock) `IRepository`, `IEmailSender` vb. ile.
+- Validator’lar: `ValidationTestExtensions` veya doğrudan `Validate` çağrısı.
+- Pipeline davranışları ayrı testlenebilir.
+
+## Integration.Tests
+- HTTP endpoint’ler tam boru hattı ile (middleware, auth, DB).
+- Auth için test istemcisinde token alınması veya `WebApplicationFactory` içinde auth override.
+- Test verisi: migration + seed veya her testte temiz DB (transaction geri alma stratejisi).
+
+## Genel ilkeler
+- Testler **deterministik** olmalıdır; gerçek ağ ve prod DB’siz.
+- `CancellationToken` ile async testler `CancellationToken.None` veya `TestContext.Current.CancellationToken` (runner destekliyorsa).
+- Hız: integration seti CI’da paralel çalıştırılabilecek şekilde ayrılmış tutulur.
+
+---
+
+## Frontend — teknoloji (önerilen paketler)
+
+- **Tek çerçeve:** **Vitest** (Vite ile doğal uyum) + **React Testing Library** (bileşen davranışı, kullanıcı odaklı).
+- **E2E:** **Playwright** (veya Cypress) — kritik akışlar: giriş, sepet, ödeme başlangıcı, hesap ayarları. E2E **gerçek prod URL çalıştırmaz**; `PLAYWRIGHT_BASE_URL=http://localhost:5173` ve mock/staging API — `gulora-devops-ci.mdc` CI iş bölümü.
+
+## Frontend — klasör ve adlandırma
+
+- Tek konvansiyon: `*.test.ts(x)` veya `*.spec.ts(x)` bileşen yanında veya `frontend/src/test/` altında.
+- E2E: `frontend/e2e/` (veya `frontend/tests/e2e/`) — dosya adı `auth-flow.spec.ts` gibi senaryo tabanlı.
+
+## Frontend — tek entegrasyon kuralı
+
+- Bileşen testlerinde **doğrudan `fetch` mock** yerine mümkünse `api.ts` dışa aktarımlarını **mock** edin (`vi.mock('@/services/api')` veya dependency injection noktası) — UI `api` katmanına bağlı kalır (`gulora-frontend-api.mdc`).
+- **MSW (Mock Service Worker)** isteğe bağlıdır: kablo formatı ve sayfalama sözleşmesini backend ile aynı tutmak için faydalıdır (`gulora-api-controllers.mdc` — `PagedResult`).
+
+## Frontend — ne test edilir
+
+| Katman | Örnek |
+|-----|--------|
+| `lib/`, `hooks/` | Saf fonksiyon ve hook (RTL ile `renderHook` mümkünse). |
+| Sayfa | Router `MemoryRouter` ile; async `userEvent` + `waitFor`. |
+| Context | Provider ile izolasyon; yan etkilerde token saklama mock. |
+| E2E | Tek tarayıcı, paralel işlerde bağımsız test kullanıcısı veya temiz oturum. |
+
+## Frontend — CI
+
+- `npm run test` (vitest `run` modu) PR’da; E2E ayrı iş veya gece işi (süre bakımından).
+- Görüntü/video anlık görüntüleri stabil tutulursa — dalgalanma azalır.
+
+## İlgili kurallar
+
+- **Backend:** handler/validator: `gulora-cqrs-patterns.mdc`; entity: `gulora-domain-entities.mdc`; HTTP entegrasyon: `gulora-api-controllers.mdc`
+- **Frontend:** `api.ts` ve hata tipi: `gulora-frontend-api.mdc`
+- CI iş yapısı: `gulora-devops-ci.mdc`
+- Erişilebilirlik iddiaları: `gulora-frontend-a11y-i18n.mdc` (RTL `getByRole` tercih edilir)

@@ -1,0 +1,41 @@
+---
+description: Gülora frontend — erişilebilirlik (a11y), klavye, i18n
+globs: frontend/src/components/**/*.tsx,frontend/src/pages/**/*.tsx,frontend/src/context/**/*.tsx,frontend/src/App.tsx,frontend/src/main.tsx,frontend/src/lib/**/*.ts,frontend/src/data/**/*.ts,frontend/src/types/**/*.ts,frontend/src/hooks/**/*.ts,frontend/src/routes/**/*.{tsx,ts}
+alwaysApply: false
+---
+
+# Frontend — erişilebilirlik ve çok dillilik
+
+Bu kural **kullanıcı erişimi** ve **metin stratejisi** içindir; görsel yönergeler `gulora-frontend-ui.mdc` ile uyumlu olmalıdır.
+
+## Erişilebilirlik (a11y) — ilkeler
+
+1. **Semantik:** mümkünse düz HTML (`button`, `a`, `nav`, `main`, `h1`–`h6` hiyerarşisi); “div ile düğme” yalnızca gerekliyse ve `role`, `tabIndex`, klavye işleyicileri ile tam eşdeğer.
+2. **Klavye:** tüm etkileşimli öğeler **Tab** ile erişilebilir; modal açıldığında odak mantıklı şekilde zorunlu alana / kapat düğmesine geçer; `Escape` ile kapanma — proje UX kararıyla tek tip.
+3. **Odak görünürlüğü:** `outline-none` yalnızca yerine açık odak stili varsa (ör. `ring-2 ring-offset-2`); odak asla tamamen “kaybolmamalıdır”.
+4. **Renk ve kontrast:** metin ve önemli UI için WCAG **AA** minimumuna yaklaşılır; bilgi yalnızca renkle verilmez (ör. hata için ikon veya metin de eklenir).
+5. **Görsel ve medya:** içerik taşıyan görsellerde `alt`; dekoratif için boş `alt=""` veya `aria-hidden`.
+6. **Formlar:** `label` her alanla ilişkilidir (`htmlFor` / `id`); sunucu hataları `aria-live="polite"` veya alan düzeyinde `aria-invalid` / `aria-describedby` ile duyurulabilir.
+7. **Hareket:** `prefers-reduced-motion` medya sorgusu ile ağır animasyonlar azaltılır veya kapatılır.
+
+## Ekran okuyucular
+
+- Dinamik içerik güncellenince (sepet, toast) gerekirse **`aria-live`** bölgesi; çok sık güncellenen içeriği “assertive” ile spam etmeyin.
+- İkon düğmelerinde görünür metin yoksa **`aria-label`** veya görsel olarak gizlenmiş metin.
+
+## Çok dillilik (i18n)
+
+- **Kaynak:** kullanıcıya görünen tüm metinler (sayfa, hata, toast) sonradan çeviri için **tek merkezden** yönetilmelidir: `src/locales/` JSON/TS modülleri veya `react-i18next` gibi kütüphane — takım tek yaklaşım seçer ve değiştirmez.
+- **Çeviri anahtarı adlandırma (proje standardı):** nokta ile ayrılmış **özellik.bölüm.bileşen** veya **özellik.bölüm.eylem** (ör. `orders.list.title`, `auth.login.submit`, `errors.validation.required`). Kısaltmalar ve rastgele kısa kodlar yerine okunabilir hiyerarşi kullanın; İngilizce veya Türkçe segmentler tutarlı olsun (repo diline göre tek dil seçin).
+- **Biçim:** tarih ve sayı için `Intl.DateTimeFormat` / `Intl.NumberFormat` (locale parametresi ile); para birimi backend sözleşmesi ile uyumlu (`gulora-infrastructure-contracts.mdc` — para kablo formatı).
+- **Fallback:** ana dil (ör. `tr` veya `az`) eksikte açık fallback; anahtar dizeler kodda uzun cümle olarak sabitlenmez — `t('anahtar')` veya eşdeğeri.
+- **Backend ile uyum:** API’den dönen yerelleştirilmiş `ProblemDetails` / doğrulama mesajları mümkünse istemci dilinde gösterilir; sunucu tarafı dil stratejisi `gulora-api-controllers.mdc`. İstemci yalnızca teknik kod taşıyorsa hata eşlemesi `api.ts` içinde merkezi yapılır.
+
+## Router ve sayfa başlığı
+
+- Her route için `usePageMeta` veya benzeri hook ile **`document.title`** ve gerekirse meta açıklama güncellensin; SPA’da derin geçişlerde başlık değişimi erişilebilirlik için izlenebilir.
+
+## İlgili kurallar
+
+- UI klasörü ve `fetch` yasağı: `gulora-frontend-ui.mdc`
+- API ve hata mesajları: `gulora-frontend-api.mdc`, `gulora-api-controllers.mdc`

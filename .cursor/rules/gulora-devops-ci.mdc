@@ -1,0 +1,51 @@
+---
+description: Gülora CI/CD, migration dağıtımı, konteyner ve dal stratejisi — üst düzey
+globs: .github/**/*.{yml,yaml},**/azure-pipelines.{yml,yaml},Dockerfile*,docker-compose*.{yml,yaml},**/*.csproj
+alwaysApply: false
+---
+
+# DevOps ve CI/CD (üst düzey)
+
+Bu kural **altyapı kararlarını** sabitler; somut sözdizimi her araca (GitHub Actions, Azure DevOps vb.) uyarlanabilir.
+
+## CI boru hattı (minimum beklenti)
+
+1. **Backend:** `dotnet restore` → `dotnet build` (Release veya CI yapılandırması) → tüm `Gulora.*.Tests` için `dotnet test` (kararsız olmayan, paralel çalıştırılabilen setle).
+2. **Frontend:** `npm ci` → `npm run build` → `npm run lint` → (varsa) `npm run test` / E2E ayrı işte.
+3. **Biçim ve statik analiz (önerilen):** `dotnet format --verify-no-changes` (veya ekip standardı) backend PR’larında; frontend’de **ESLint** + isteğe bağlı **Prettier** `--check` — komutlar `package.json` / workflow’da tek kaynak olmalıdır.
+4. **Sırlar:** asla repoda değil; pipeline `secrets` / ortam değişkenleri ile JWT, DB bağlantısı, ödeme anahtarları.
+5. **Bağımlılık güncellemeleri:** GitHub Dependabot, Renovate veya manuel denetim — `npm` ve NuGet için tek ilke (major ayrı PR, minor/patch gruplu).
+6. **Sır ve gizli anahtar taraması (önerilen):** PR’larda `git-secrets`, TruffleHog, GitHub **secret scanning** veya eşdeğeri ile yanlışlıkla commit edilmiş sırların engellenmesi; başarısız tarama merge’i bloklar.
+
+Ayrıntılı güvenlik: `gulora-security.mdc`. Genel stack özeti: `gulora-architecture.mdc`.
+
+## Veritabanı migration’ları
+
+- Yalnızca **repoya commit edilmiş** EF migration dosyaları ile ilerleyin; prod’a “elle SQL” yalnızca olağanüstü durumlarda ve denetimle.
+- Dağıtım adımı: migration **uygulamadan önce veya sonra** — takım tek strateji seçer (`dotnet ef database update` veya idempotent betik); **geri alma (rollback)** planı belgelenmelidir.
+- Kırıcı şema değişiklikleri: blue/green veya iki aşamalı dağıtım (eski kod + yeni şema, sonra yeni kod) değerlendirilmelidir.
+
+## Konteyner ve ortam
+
+- **Image:** çok aşamalı derleme (SDK → runtime), yalnızca gerekli artefact’lar; root olarak çalışan süreç minimum ayrıcalık.
+- **Yapılandırma:** `ASPNETCORE_ENVIRONMENT`, bağlantı dizeleri, JWT anahtarları — çalışma zamanı ortamından; image içinde sırlı dosya yoktur.
+- **Sağlık:** konteyner orkestrasyonunda readiness `/ready` veya `/health` ile (`gulora-api-controllers.mdc`).
+
+## Dal ve PR (öneri)
+
+- `main` / `master` — her zaman dağıtılabilir durum; özellik dalı → PR → kod incelemesi → CI yeşil.
+- PR’da migration dosyası varsa, PR açıklaması migration etkisini kısaca anlatmalıdır (kırıcı / veri backfill).
+
+## Frontend build artefaktı
+
+- Statik varlıklar CDN veya reverse proxy arkasında; `VITE_*` build-time değişkenleri — prod değerleri pipeline’da güvenli atanır (istemciye sızmaması gereken sırlar yok).
+
+## Gözlemlenebilirlik (CI ile uyum)
+
+- Üretim ve staging’de korelasyon ID’sinin loglara düşmesi beklenir; merkezi log/iz toplama varsa pipeline’da sağlık kontrolü job’ları başarısızlıkta uyarı üretir — `gulora-architecture.mdc`.
+
+## İlgili kurallar
+
+- Mimari ve CI özeti: `gulora-architecture.mdc`
+- API sağlık ve OpenAPI: `gulora-api-controllers.mdc`
+- Test stratejisi (backend + frontend): `gulora-tests.mdc`

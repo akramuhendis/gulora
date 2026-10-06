@@ -1,0 +1,105 @@
+---
+description: Gülora CQRS + MediatR desen kuralları
+globs: backend/src/Gulora.Application/**/*.cs
+alwaysApply: false
+---
+
+# CQRS + MediatR desenleri
+
+## Klasör yapısı
+```
+Application/
+├── Auth/
+│   ├── Commands/
+│   │   ├── Login/
+│   │   │   ├── LoginCommand.cs          ← record IRequest<T>
+│   │   │   ├── LoginCommandHandler.cs   ← IRequestHandler<,>
+│   │   │   └── LoginCommandValidator.cs ← AbstractValidator<T>
+│   │   └── Register/...
+│   └── Queries/
+│       └── GetCurrentUser/...
+├── Orders/
+│   ├── Commands/CreateOrder/...
+│   └── Queries/GetOrderById/...
+└── Common/
+    ├── Behaviors/
+    │   ├── ValidationBehavior.cs        ← pipeline doğrulama
+    │   └── LoggingBehavior.cs
+    └── Exceptions/
+        ├── NotFoundException.cs
+        ├── ValidationException.cs
+        ├── UnauthorizedException.cs   ← 401 (kimlik doğrulama)
+        └── ForbiddenException.cs       ← 403 (yetkilendirme)
+```
+
+## Pipeline davranışları (sıra ve amaç)
+
+**Proje standardı (yürütme zinciri):** dıştan içe — önce **loglama** (giriş/çıkış, süre, korelasyon id), sonra **doğrulama**, sonra **handler**. Böylece geçersiz istekler de denetim iziyle kaydedilir; doğrulama başarısız olursa handler çalışmaz.
+
+1. `LoggingBehavior` — istek bağlamı, süre, hata seviyesi (PII/token yazılmaz — `gulora-security.mdc`).
+2. `ValidationBehavior` — FluentValidation; hata varsa `ValidationException` fırlat
+3. Handler çalışır
+
+**Kanonik sıra (Gülora):** `LoggingBehavior` → `ValidationBehavior` → handler; `Application/DependencyInjection.cs` içindeki `AddTransient(typeof(IPipelineBehavior<,>), …)` sırası **bu numaralı liste ile birebir aynı** tutulur (kod incelemesinde kontrol edilir).
+
+**Sırayı değiştirmek:** MediatR sürümüne göre kayıt sırasının yürütme etkisini doğrulayın. “Önce doğrulama, sonra log” gibi alternatif bir zincir seçilirse **hem bu bölüm hem `DependencyInjection.cs` hem ilgili pipeline testleri** aynı PR’da güncellenir; projede tek geçerli sıra vardır.
+
+## Command vs Query
+| Tür | Interface | Yan etki | Dönüş |
+|-----|-----------|----------|--------|
+| Command | `IRequest<T>` | DB’yi değiştirir | Guid / Response DTO |
+| Query | `IRequest<T>` | Yalnızca okuma | DTO |
+
+## FluentValidation — örnek
+```csharp
+public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
+{
+    public CreateOrderCommandValidator()
+    {
+        RuleFor(x => x.Items).NotEmpty().WithMessage("Sipariş boş olamaz.");
+        RuleFor(x => x.AddressId).NotEmpty();
+        RuleFor(x => x.PaymentMethod)
+            .IsInEnum()
+            .WithMessage("Geçersiz ödeme yöntemi.");
+    }
+}
+```
+
+## Application DI kaydı
+
+**Örnek:** aşağıdaki transient kayıt **Logging → Validation** sırasını yansıtır (`LoggingBehavior` önce, sonra `ValidationBehavior`) — yukarıdaki numaralı liste ile aynı tutulmalıdır.
+
+```csharp
+// Application/DependencyInjection.cs
+public static IServiceCollection AddApplication(this IServiceCollection services)
+{
+    services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+    services.AddAutoMapper(Assembly.GetExecutingAssembly());
+    services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
+    services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+    services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+    return services;
+}
+```
+
+## AutoMapper profili
+```csharp
+// Application/Orders/Queries/GetOrderById/OrderMappingProfile.cs
+public class OrderMappingProfile : Profile
+{
+    public OrderMappingProfile()
+    {
+        CreateMap<Order, OrderDto>()
+            .ForMember(d => d.StatusLabel, o => o.MapFrom(s => s.Status.ToDisplayString()));
+    }
+}
+```
+
+## Domain olaylarının dağıtımı (yüksek seviye)
+- Varlıklar `AddDomainEvent` ile olay toplar; **handler bitene** veya **işlem onaylanana** kadar dış dünyaya yayınlamayın (tutarsız durum).
+- Standart yaklaşım: `SaveChanges` başarılı olduktan sonra **Infrastructure** (ör. `DbContext` override, `SaveChangesInterceptor` veya Unit of Work) toplanan olayları **MediatR `INotification`** veya mesaj kuyruğuna iletir; alternatif: **transactional outbox** tablosu + arka plan işçisi — yük ve güvenilirlik arttığında.
+- İlgili model: `gulora-domain-entities.mdc` (DomainEvents alanı).
+
+## İlgili kurallar
+- İstisnaların HTTP ile eşlemesi: `gulora-api-controllers.mdc` (`UnauthorizedException` / `ForbiddenException`).
+- Güvenlik (doğrulama, yetki): `gulora-security.mdc`.

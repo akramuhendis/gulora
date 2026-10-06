@@ -1,0 +1,5 @@
+{
+  "terminal.integrated.env.windows": {
+    "EXPO_PUBLIC_API_URL": ""
+  }
+}

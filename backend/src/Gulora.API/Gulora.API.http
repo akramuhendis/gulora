@@ -1,0 +1,185 @@
+### Gülora API — örnek istekler
+### Base URL: http://localhost:5284
+### Swagger: http://localhost:5284/swagger
+### Health: http://localhost:5284/health
+
+@baseUrl = http://localhost:5284/api/v1
+@token = <JWT_ACCESS_TOKEN>
+
+# ─── Auth ────────────────────────────────────────────────────────────────────
+
+### Kayıt
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "firstName": "Aysel",
+  "lastName": "Məmmədova",
+  "email": "aysel@example.com",
+  "password": "Test@1234",
+  "phoneNumber": "+994501234567"
+}
+
+###
+
+### Giriş
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "aysel@example.com",
+  "password": "Test@1234"
+}
+
+###
+
+### Token yenile
+POST {{baseUrl}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "<REFRESH_TOKEN>"
+}
+
+###
+
+### Çıkış
+POST {{baseUrl}}/auth/logout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "refreshToken": "<REFRESH_TOKEN>"
+}
+
+###
+
+### Mevcut kullanıcı
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+# ─── Ürünler ─────────────────────────────────────────────────────────────────
+
+###
+
+### Ürün listesi
+GET {{baseUrl}}/products?page=1&pageSize=20
+
+###
+
+### Ürün arama
+GET {{baseUrl}}/products/search?query=gül&page=1&pageSize=10
+
+###
+
+### Slug ile ürün detayı
+GET {{baseUrl}}/products/kirmizi-gul-buketi
+
+# ─── Kategoriler ─────────────────────────────────────────────────────────────
+
+###
+
+### Kategori ağacı
+GET {{baseUrl}}/categories
+
+# ─── Siparişler ──────────────────────────────────────────────────────────────
+
+###
+
+### Sipariş listesi (müşteri)
+GET {{baseUrl}}/orders?page=1&pageSize=10
+Authorization: Bearer {{token}}
+
+###
+
+### Sipariş oluştur
+POST {{baseUrl}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "addressId": "00000000-0000-0000-0000-000000000000",
+  "deliveryType": "Standard",
+  "paymentMethod": "CreditCard",
+  "items": [
+    { "productId": "00000000-0000-0000-0000-000000000000", "quantity": 2 }
+  ],
+  "couponCode": null
+}
+
+# ─── İstek Listesi ───────────────────────────────────────────────────────────
+
+###
+
+### İstek listesi
+GET {{baseUrl}}/wishlist
+Authorization: Bearer {{token}}
+
+###
+
+### İstek listesine ekle
+POST {{baseUrl}}/wishlist
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "productId": "00000000-0000-0000-0000-000000000000"
+}
+
+# ─── Kupon Doğrulama ─────────────────────────────────────────────────────────
+
+###
+
+### Kupon doğrula
+GET {{baseUrl}}/coupons/validate?code=YENI10&orderSubTotal=250.00
+Authorization: Bearer {{token}}
+
+# ─── Satıcı paneli (JWT rolü: Seller) ────────────────────────────────────────
+
+###
+
+### Satıcı ürün envanteri
+GET {{baseUrl}}/seller/products?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+###
+
+### Satıcı sipariş listesi
+GET {{baseUrl}}/seller/orders?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+###
+
+### Satıcı sipariş detayı
+GET {{baseUrl}}/seller/orders/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+###
+
+### Satıcı sipariş durumu (tek satıcılı siparişlerde)
+PATCH {{baseUrl}}/seller/orders/00000000-0000-0000-0000-000000000000/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "newStatus": "Confirmed"
+}
+
+###
+
+### Satıcı kargoya verme (siparişte yalnızca bu satıcının ürünleri varsa)
+POST {{baseUrl}}/seller/orders/00000000-0000-0000-0000-000000000000/ship
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "cargoCompany": "UPS",
+  "trackingNumber": "TR123456789"
+}
+
+# ─── Sağlık ──────────────────────────────────────────────────────────────────
+
+###
+
+### Sağlık kontrolü
+GET http://localhost:5284/health

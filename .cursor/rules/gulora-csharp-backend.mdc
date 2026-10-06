@@ -1,0 +1,83 @@
+---
+description: Gülora backend C# kodlama standartları
+globs: backend/src/**/*.cs,backend/tests/**/*.cs,**/Gulora.*.Tests/**/*.cs
+alwaysApply: false
+---
+
+> **Glob uyumu:** `backend/src` ve `backend/tests` proje yapısına uygundur; test projeleri çözüm kökündeyse (`tests/Gulora.*.Tests/`) `**/Gulora.*.Tests/**/*.cs` de kapsanır. Ayrıntı: `gulora-architecture.mdc` (“Yollar ve glob’lar”).
+
+# C# backend standartları
+
+## Genel kurallar
+- Tüm public metodlar `async Task<T>` ile yazılmalıdır; `void` yalnızca olay işleyicileri içindir
+- `CancellationToken ct` tüm async metodların son parametresi olmalıdır (arka plan işleri ve hosted service’ler dahil)
+- `record` tipleri Commands, Queries, DTO’lar için kullanılır; Entity için `class`
+- Nullable reference types etkin: `#nullable enable` (proje geneli)
+- `var` yalnızca tip açık göründüğünde; karmaşık generics için açık tip yazın
+
+## Arka plan işleri ve zamanlanmış görevler (yüksek seviye)
+- `IHostedService`, `BackgroundService`, mesaj kuyruğu tüketicisi veya outbox işleyici: **iş kuralı** Application/Domain’de; Infrastructure yalnızca altyapı (EF, HTTP istemcisi, kuyruk bağlantısı).
+- Uzun süren döngülerde `CancellationToken` dinlenir; yeniden deneme ve dış hata sınırları Infrastructure’da (Polly vb.) — `gulora-infrastructure-contracts.mdc`.
+- Aynı iş kuralını HTTP ve arka plan yolunda tekrarlamayın; ortak use case/handler mantığı paylaşılır.
+
+## Domain katmanı — kurallar
+```csharp
+// ✅ DOĞRU — Domain entity, dış bağımlılık yok
+public class Product
+{
+    public Guid Id { get; private set; }
+    public string Name { get; private set; } = string.Empty;
+    public decimal Price { get; private set; }
+
+    // Domain mantığı metodları
+    public void ApplyDiscount(decimal percent) { ... }
+}
+
+// ❌ YANLIŞ — Domain entity üzerinde EF Core attribute
+[Table("products")]
+public class Product { ... }
+```
+
+## Application katmanı — CQRS
+```csharp
+// ✅ DOĞRU — record Command + Handler + Validator aynı klasörde
+// Application/Orders/Commands/CreateOrder/
+//   CreateOrderCommand.cs
+//   CreateOrderCommandHandler.cs
+//   CreateOrderCommandValidator.cs
+
+public record CreateOrderCommand(
+    Guid UserId,
+    List<OrderItemDto> Items,
+    Guid AddressId,
+    string PaymentMethod
+) : IRequest<Guid>;
+```
+
+## Infrastructure katmanı
+- EF Core yalnızca Infrastructure’da; Domain/Application’a sızmasın
+- Repository pattern: `IRepository<T>` arayüzü Application’da, uygulama Infrastructure’da
+- Migration adı: `dotnet ef migrations add {PascalCaseName}`
+- Seed verisi `IEntityTypeConfiguration<T>.Configure()` içindedir
+- Ayrıntılı Contracts/EF/JWT kuralları: `gulora-infrastructure-contracts.mdc`; güvenlik: `gulora-security.mdc`
+
+## Hata yönetimi
+```csharp
+// ✅ DOĞRU — Özel domain istisnaları
+throw new NotFoundException(nameof(Product), id);
+throw new ValidationException(errors);
+throw new UnauthorizedException("Giriş gerekli.");
+throw new ForbiddenException("Bu işlem için yetkiniz yok.");
+
+// ❌ YANLIŞ — Genel Exception
+throw new Exception("Something went wrong");
+```
+
+## Logging — Serilog
+```csharp
+// ✅ DOĞRU — yapılandırılmış loglama
+_logger.LogInformation("Order {OrderId} created for user {UserId}", orderId, userId);
+
+// ❌ YANLIŞ — string interpolation
+_logger.LogInformation($"Order {orderId} created");
+```

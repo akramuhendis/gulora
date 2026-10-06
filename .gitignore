@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+bin/
+obj/
+out/
+*.user
+*.suo
+*.cache
+
+# .NET
+*.dll
+*.exe
+*.pdb
+*.nupkg
+project.lock.json
+TestResults/
+coverage/
+*.DotSettings.user
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+appsettings.*.local.json
+**/secrets.json
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Expo / React Native
+.expo/
+.expo-shared/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+
+# Uploads (local dev)
+uploads/
+backend/src/Gulora.API/uploads/
+
+# Misc
+*.tsbuildinfo
+.turbo/

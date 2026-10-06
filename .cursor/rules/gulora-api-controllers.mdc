@@ -1,0 +1,169 @@
+---
+description: Gülora API Controller kuralları
+globs: backend/src/Gulora.API/**/*.cs
+alwaysApply: false
+---
+
+# API controller kuralları
+
+## Controller şablonu
+```csharp
+[ApiController]
+[Route("api/v1/[controller]")]
+[Produces("application/json")]
+public class OrdersController : ControllerBase
+{
+    private readonly ISender _mediator;
+
+    public OrdersController(ISender mediator) => _mediator = mediator;
+
+    // GET api/v1/orders
+    [HttpGet]
+    [Authorize]
+    [ProducesResponseType(typeof(List<OrderDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetOrders(CancellationToken ct)
+    {
+        var userId = User.GetUserId();  // extension method
+        var result = await _mediator.Send(new GetUserOrdersQuery(userId), ct);
+        return Ok(result);
+    }
+}
+```
+
+## HTTP sözleşmesi: Contracts → Application
+- **JSON gövdesi ve route parametreleri** `Gulora.Contracts` içindeki `*Request` / `*Response` (veya sayfalama istek kayıtları) ile modellenir; **Application** `Command` / `Query` kayıtları public API sözleşmesi olarak UI’a açılmaz.
+- Controller **yalnızca ince katman**dır: kimlik doğrulama/ tanımlayıcı (`User.GetUserId()`), **eşleme** (`CreateOrderRequest` → `CreateOrderCommand`), `_mediator.Send`. Ağır doğrulama ve iş kuralı handler + FluentValidation’da.
+- Yinelenen eşleme için API projesinde küçük `*Mapper` veya AutoMapper profili kabul edilir; iş hesaplaması eşlemede değil, handler’da kalır.
+
+## HTTP durum kodları (proje standardı)
+| Durum | Kod |
+|-----|--------|
+| Başarılı GET / PUT / PATCH (gövde ile) | 200 OK |
+| Başarılı DELETE (gövde yoksa) | 204 No Content |
+| Yeni kaynak oluşturuldu | 201 Created + `Location` (mümkünse) |
+| Doğrulama / iş kuralı ihlali (genel) | 400 Bad Request + `ValidationProblemDetails` / `ProblemDetails` |
+| Kimlik doğrulama yok veya token geçersiz | 401 Unauthorized |
+| Kimlik doğrulama var, kaynak için yetki yok | 403 Forbidden |
+| Kaynak bulunamadı | 404 Not Found + `ProblemDetails` |
+| Aynı işlemin tekrarı veya sürüm çakışması | 409 Conflict + `ProblemDetails` |
+| İstek sözdizimi / medya tipi uyumsuzluğu | 415 Unsupported Media Type (gerekirse) |
+| Beklenmeyen sunucu hatası (yakalanmamış istisna) | 500 Internal Server Error + genel `ProblemDetails` (ayrıntılı stack kullanıcıya verilmez) |
+| Dış servis veya DB geçici olarak erişilemez | 503 Service Unavailable (mümkünse `Retry-After`) |
+
+**Not:** Bazı API’ler doğrulama için `422 Unprocessable Entity` kullanır; bu projede doğrulama yanıtı **`400` + `ValidationProblemDetails`** ile birleştirilir (middleware ve FluentValidation ile uyumlu).
+
+**401 vs 403:** 401 — “kim olduğun bilinmiyor / token geçersiz”; 403 — “biliniyorsun ama bu işleme yetkin yok”.
+
+## Kullanımdan kaldırma ve API evrimi (yüksek seviye)
+- Geriye dönük uyumlu alan eklemeleri tercih edilir; kırıcı değişiklikler için yeni sürüm yolu (`v2`) veya ayrı endpoint değerlendirilir — `gulora-architecture.mdc`.
+- Eski uçlar kademeli kapatılırken mümkünse **`Deprecation`** (RFC 9745 ilkesi) ve **`Sunset`** (kapanış tarihi) HTTP başlıkları veya belgeli takvim kullanılır; istemci ekipleri önceden bilgilendirilir.
+
+## Global exception middleware
+```csharp
+// API/Middleware/GlobalExceptionMiddleware.cs
+public class GlobalExceptionMiddleware
+{
+    public async Task InvokeAsync(HttpContext ctx, RequestDelegate next)
+    {
+        try { await next(ctx); }
+        catch (NotFoundException ex)
+        {
+            ctx.Response.StatusCode = 404;
+            await ctx.Response.WriteAsJsonAsync(
+                new ProblemDetails { Title = "Bulunamadı", Detail = ex.Message });
+        }
+        catch (ValidationException ex)
+        {
+            ctx.Response.StatusCode = 400;
+            await ctx.Response.WriteAsJsonAsync(
+                new ValidationProblemDetails(ex.Errors));
+        }
+        catch (UnauthorizedException ex)
+        {
+            ctx.Response.StatusCode = 401;
+            await ctx.Response.WriteAsJsonAsync(
+                new ProblemDetails { Title = "Kimlik doğrulama gerekli", Detail = ex.Message });
+        }
+        catch (ForbiddenException ex)
+        {
+            ctx.Response.StatusCode = 403;
+            await ctx.Response.WriteAsJsonAsync(
+                new ProblemDetails { Title = "Yetki yok", Detail = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            // _logger.LogError(ex, "Unhandled exception"); — ILogger ctor/DI ile
+            ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            await ctx.Response.WriteAsJsonAsync(new ProblemDetails
+            {
+                Title = "Sunucu hatası",
+                Detail = "Bir hata oluştu. Lütfen daha sonra tekrar deneyin.",
+                Status = StatusCodes.Status500InternalServerError
+            });
+        }
+    }
+}
+```
+
+## OpenAPI (Swagger) — yüksek seviye
+- Geliştirme ortamında **Swashbuckle** (`AddEndpointsApiExplorer` + `AddSwaggerGen` + `UseSwagger` / `UseSwaggerUI`) ile endpoint belgelendirmesi önerilir.
+- Üretimde UI veya ham spec **kısıtlanmalı** veya kapatılmalıdır (gizlilik).
+
+## Sağlık kontrolü
+- `Microsoft.Extensions.Diagnostics.HealthChecks` ile en azından **`/health`** (gerekirse **`/ready`** — DB bağlantısı) ekleyin; load balancer ve CI dağıtım adımları buna güvenebilir.
+
+## CORS yapılandırması
+```csharp
+// Dev: localhost:5173 (Vite)  |  Prod: gulora.az
+builder.Services.AddCors(o => o.AddPolicy("FrontendPolicy", p =>
+    p.WithOrigins("http://localhost:5173", "https://gulora.az")
+     .AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+```
+
+## Sayfalama — standart yanıt
+```csharp
+public record PagedResult<T>(
+    List<T> Items,
+    int TotalCount,
+    int Page,
+    int PageSize
+);
+// Tüm liste endpoint’leri PagedResult<T> döner.
+// JSON’da camelCase ilkesi: items, totalCount, page, pageSize
+```
+
+## Sayfalama — üst sınır
+- `pageSize` (ve gerekirse `page`) için **takımca sabitlenmiş üst sınır** (ör. `pageSize` ≤ 100) tüm liste uçlarında aynı uygulanır; aşımda **400** + doğrulama mesajı veya güvenli **kırpma** — tek strateji seçilir ve Contracts/query parametreleriyle belgelenir.
+
+## Sunucu tarafı dil ve hata metni (yüksek seviye)
+- İstemci `Accept-Language` (veya anlaşılmış sorgu parametresi) ile UI dili; `ProblemDetails` / FluentValidation mesajları **Application** katmanında yerelleştirilebilir kaynak veya tek sözlükten üretilir, dağınık sabit metinlerden kaçınılır. İstemci çeviri anahtarları `gulora-frontend-a11y-i18n.mdc` ile aynı ürün dilinde tutarlı kalır.
+
+## Önbellek ve liste performansı (yüksek seviye)
+- Halka açık, değişmeyen GET içeriklerinde CDN uyumlu **`Cache-Control`**; kullanıcıya özel listelerde **`private`**, kısa `max-age` veya **`no-store`** / **`no-cache`**; mümkünse **ETag** ile koşullu istek. Kritik iş verisi için agresif public cache kullanılmaz.
+
+## Controller’da iş mantığı YASAK
+```csharp
+// ❌ YANLIŞ — controller’da hesaplama
+[HttpPost]
+public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest req)
+{
+    var total = req.Items.Sum(i => i.Price * i.Qty);  // İŞ MANTIĞI — YASAK
+    ...
+}
+
+// ✅ DOĞRU — Contracts gövdesi → Command eşleme → MediatR
+[HttpPost]
+public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest req, CancellationToken ct)
+{
+    var userId = User.GetUserId();
+    var cmd = new CreateOrderCommand(userId, req.Items, req.AddressId, req.PaymentMethod);
+    var id = await _mediator.Send(cmd, ct);
+    return CreatedAtAction(nameof(GetOrderById), new { id }, value: null);
+}
+```
+
+## İlgili kurallar
+- CORS, JWT, rate limit, PII: `gulora-security.mdc`
+- İstisna sınıfları: `gulora-cqrs-patterns.mdc` (Application/Common/Exceptions)
+- CI, dağıtım, sağlık kontrolü işleri: `gulora-devops-ci.mdc`
+- SignalR / gerçek zamanlı özet: `gulora-architecture.mdc`

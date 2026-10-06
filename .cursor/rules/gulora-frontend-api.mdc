@@ -1,0 +1,139 @@
+---
+description: Gülora frontend API servis kuralları — backend entegrasyonu
+globs: frontend/src/services/**/*.ts,frontend/src/services/**/*.tsx
+alwaysApply: false
+---
+
+# Frontend API entegrasyon kuralları
+
+## Geliştirme ortamı: taban URL ve proxy (tek anlam)
+
+Backend route’ları **`/api/v1/...`** altındadır (`gulora-architecture.mdc` — “API taban URL” tablosu). Frontend `request()` için taban yol iki moddan birine uygun seçilmelidir:
+
+| Mod | `import.meta.env.VITE_API_URL` | `fetch` taban örneği | Not |
+|--------|-------------------------------|------------------------|------|
+| **Göreli (Vite proxy)** | tanımlama veya boş | `'/api/v1'` | Tarayıcı `http://localhost:5173/api/v1/...` isteği gönderir; `vite.config.ts` içinde `/api` → `http://localhost:5284` proxy ile ASP.NET’e düşer. CORS geliştirmede genelde gerekmez. |
+| **Tam origin** | `http://localhost:5284/api/v1` | env değeri | Doğrudan API’ye istek; CORS ilkesi backend’de `localhost:5173` için açık olmalıdır. |
+
+**Öneri:** takım içinde tek mod seçin; README ve `.env.example` içinde aynı tabloyu tekrarlamayın — kanonik açıklama `gulora-architecture.mdc` içindedir.
+
+## Kanonik dosya: `src/services/api.ts`
+- Tüm REST çağrıları ve `productApi`, `authApi`, `orderApi` gibi modül dışa aktarımları **bu dosyada** merkezileştirilir; UI bileşenleri doğrudan `fetch` çağırmaz.
+- **Mevcut aşama:** statik veri ve stub `Promise.resolve` olabilir. Backend hazır olduğunda aynı dışa aktarılan arayüz korunur, iç uygulama `request()` yardımcısına geçer (dosya adını değiştirmek gerekmez).
+
+## OpenAPI → TypeScript (isteğe bağlı, üst düzey)
+- Backend Swagger/OpenAPI şeması üretildiğinde, wire tiplerini elle kopyalamak yerine **openapi-typescript**, **NSwag** veya eşdeğer codegen ile `src/types/api.generated.ts` gibi tek dosya üretilebilir; el yazısı tiplerle çakışmayı önlemek için codegen çıktısı tek kaynak veya `api.ts` içinde yeniden dışa aktarım ile sarılır. Komuta karar verildikten sonra CI’da şema drift kontrolü düşünülür.
+
+## Dahili `request<T>()` yardımcısı (hedef yapı)
+Aşağıdaki örnek `api.ts` dosyasının **içinde** (veya gerekirse aynı klasörde yalnızca `api/http.ts` gibi bir yardımcıda) tutulabilir; ayrı `apiClient.ts` zorunlu değildir.
+
+```typescript
+const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const token = localStorage.getItem('gulora_access_token');
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  if (res.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (!refreshed) {
+      logout();
+      return Promise.reject(new Error('session_expired'));
+    }
+    return request<T>(path, options);
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, err.detail ?? 'Bir hata oluştu.');
+  }
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return text ? (JSON.parse(text) as T) : (undefined as T);
+}
+```
+
+## Token yönetimi
+```typescript
+// ✅ DOĞRU
+localStorage.setItem('gulora_access_token', data.accessToken);
+// RefreshToken: httpOnly cookie — backend ayarlar
+
+// ❌ YANLIŞ — parolayı localStorage’da saklamak
+localStorage.setItem('gulora_password', password);
+```
+
+## Vite geliştirme proxy (`vite.config.ts`)
+Proje `server.proxy` ile `/api` isteklerini backend’e yönlendirmelidir (ortamda `VITE_API_URL` tam URL verilirse proxy gerekmez).
+
+```typescript
+server: {
+  proxy: {
+    '/api': {
+      target: 'http://localhost:5284',
+      changeOrigin: true,
+    },
+  },
+},
+```
+
+## Ortam değişkenleri (`.env.local`)
+
+**Tam URL modu için örnek:**
+```
+VITE_API_URL=http://localhost:5284/api/v1
+```
+
+**Proxy modu:** `VITE_API_URL` boş bırakılabilir — `request()` kodu `'/api/v1'` fallback kullanmalıdır (`gulora-architecture.mdc` ile uyumlu).
+
+## Tip uyumu — Backend ↔ Frontend
+| Backend (C#) | Frontend (TypeScript) |
+|--------------|------------------------|
+| `Guid` | `string` |
+| `DateTime` (UTC ISO) | `string` (ISO 8601) |
+| `decimal` | `number` (dikkat: ikili kesir; para için backend `long`/minor veya `string` gönderirse uygun tip kullanın — `gulora-infrastructure-contracts.mdc`) |
+| `enum` (string) | `string` union type |
+| `List<T>` | `T[]` |
+| `PagedResult<T>` (JSON camelCase) | `{ items: T[]; totalCount: number; page: number; pageSize: number }` |
+
+**JSON adları:** API `System.Text.Json` ile camelCase gönderiyorsa, C# `Items` → `items`. Frontend tipinde her zaman **kablo formatı** (camelCase) kullanın.
+
+## AuthContext — backend ile
+```typescript
+// ❌ YANLIŞ — yalnızca localStorage ile sahte auth
+// ✅ DOĞRU — authApi gerçek backend’e bağlandığında:
+const login = async (email: string, password: string) => {
+  const data = await authApi.login(email, password);
+  setUser(data.user);
+};
+```
+
+## Hata gösterme
+```typescript
+try {
+  await authApi.login(email, password);
+} catch (e) {
+  if (e instanceof ApiError) {
+    addToast(e.message, 'error'); // ToastContext
+  }
+}
+```
+
+## `ApiError` sınıfı
+`request()` yardımcısı ile aynı modülde tanımlayın: `status`, `message` — UI’da 400/403/404 için farklı mesaj göstermek mümkün olsun.
+
+## İlgili kurallar
+- Genel mimari ve API URL: `gulora-architecture.mdc`
+- Backend HTTP kodları ve `ProblemDetails`: `gulora-api-controllers.mdc`
+- UI bileşenleri ve `fetch` yasağı bağlamı: `gulora-frontend-ui.mdc`
+- Frontend testleri (mock `fetch` / entegrasyon): `gulora-tests.mdc`

@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: gulora_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - gulora_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gulora_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5284:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=gulora_db;Username=postgres;Password=postgres"
+      Jwt__Issuer: "https://api.gulora.az"
+      Jwt__Audience: "https://gulora.az"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-CHANGE_ME_32_CHARS_MINIMUM_DEV_ONLY}"
+      Payment__WebhookSecret: "${PAYMENT_WEBHOOK_SECRET:-dev-webhook-secret}"
+      Email__Enabled: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  gulora_pg_data:

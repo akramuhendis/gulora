@@ -1,0 +1,102 @@
+---
+description: Gülora Domain varlıkları ve veritabanı modelleri
+globs: backend/src/Gulora.Domain/**/*.cs
+alwaysApply: false
+---
+
+> EF Core yapılandırması ve DB eşlemesi: `gulora-infrastructure-contracts.mdc`. Testler için varlık davranışı: `gulora-tests.mdc`.
+
+# Domain varlık kuralları
+
+## Temel varlık
+```csharp
+// Domain/Common/BaseEntity.cs
+public abstract class BaseEntity
+{
+    public Guid Id { get; protected set; } = Guid.NewGuid();
+    public DateTime CreatedAt { get; protected set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; protected set; }
+
+    private readonly List<IDomainEvent> _domainEvents = [];
+    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
+
+    protected void AddDomainEvent(IDomainEvent evt) => _domainEvents.Add(evt);
+    public void ClearDomainEvents() => _domainEvents.Clear();
+}
+```
+
+## Ana varlıklar ve alanlar
+
+### User
+```csharp
+public class User : BaseEntity
+{
+    public string FirstName { get; private set; }
+    public string LastName  { get; private set; }
+    public string Email     { get; private set; }      // unique
+    public string? PhoneNumber { get; private set; }
+    public string PasswordHash { get; private set; }   // BCrypt
+    public UserRole Role    { get; private set; }      // Customer, Admin, Seller
+    public bool IsActive    { get; private set; } = true;
+    public ICollection<RefreshToken> RefreshTokens { get; } = [];
+}
+```
+
+### Order — Aggregate Root
+```csharp
+public class Order : BaseEntity
+{
+    public Guid UserId { get; private set; }
+    public string OrderNumber  { get; private set; }   // "GUL-20260502-0001"
+    public OrderStatus Status  { get; private set; }
+    public DeliveryType DeliveryType { get; private set; }
+    public PaymentMethod PaymentMethod { get; private set; }
+    public decimal TotalAmount  { get; private set; }
+    public decimal DeliveryFee  { get; private set; }
+    public decimal DiscountAmount { get; private set; }
+    public string AddressSnapshot { get; private set; } // JSON — sipariş anındaki adres
+    public ICollection<OrderItem> Items { get; } = [];
+    public ICollection<OrderTracking> Trackings { get; } = [];
+}
+```
+
+## Enum’lar
+```csharp
+public enum OrderStatus
+{
+    Pending, Confirmed, Processing, Shipped, Delivered,
+    Cancelled, ReturnRequested, Returned
+}
+
+public enum DeliveryType  { Standard, Express, SameDay }
+public enum PaymentMethod { CreditCard, DebitCard, CashOnDelivery, BankTransfer }
+public enum UserRole      { Customer, Admin, Seller }
+public enum DiscountType  { Percent, Fixed }
+```
+
+## Soft delete stratejisi
+- `User`: `IsActive = false` (fiziksel silme yok)
+- `Product`: `IsActive = false`
+- `Address`, `Review`: fiziksel silme (`DELETE`)
+- EF Core Global Query Filter olmadan soft delete uygulanmaz
+
+## Değer nesneleri
+```csharp
+// Adres anlık görüntüsü — siparişte değişmez
+public record AddressSnapshot(
+    string RecipientName,
+    string PhoneNumber,
+    string City,
+    string District,
+    string FullLine
+);
+```
+
+## Domain olayları
+```csharp
+public record OrderCreatedEvent(Guid OrderId, Guid UserId) : IDomainEvent;
+public record OrderStatusChangedEvent(Guid OrderId, OrderStatus OldStatus, OrderStatus NewStatus) : IDomainEvent;
+public record UserRegisteredEvent(Guid UserId, string Email) : IDomainEvent;
+```
+
+**Toplama:** burada; **ne zaman ve nerede yayınlanacağı** — `gulora-cqrs-patterns.mdc` (domain olaylarının dağıtımı).

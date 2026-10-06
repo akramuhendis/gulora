@@ -1,0 +1,45 @@
+---
+description: Gülora React UI — bileşen, route, Tailwind
+globs: frontend/src/components/**/*.tsx,frontend/src/pages/**/*.tsx,frontend/src/context/**/*.tsx,frontend/src/hooks/**/*.ts,frontend/src/App.tsx,frontend/src/main.tsx,frontend/src/lib/**/*.ts,frontend/src/data/**/*.ts,frontend/src/types/**/*.ts,frontend/src/routes/**/*.{tsx,ts}
+alwaysApply: false
+---
+
+# Frontend UI kuralları
+
+## Sorumluluk katmanları
+- **Ağ ve REST:** yalnızca `src/services/api.ts` (ve oradan dışa aktarılan `*Api`) — `gulora-frontend-api.mdc`. Bileşen ve sayfalarda **`fetch` / `axios` doğrudan çağrısı yoktur**.
+- **UI:** sunum, yerel UI state, form yönetimi; sunucu verisi `api` modülünden gelen `Promise` sonuçlarına dayanır.
+
+## Klasör (öneri)
+- `src/pages/` — route’a bağlı üst düzey ekranlar (ana konvansiyon).
+- `src/routes/` — isteğe bağlı: `createBrowserRouter` yapılandırması, `lazy()` yükleme, route tabanlı `loader`/`action` (Router 7 data API kullanılıyorsa) — **iş kuralı ve HTTP** yine `api.ts` içinde kalır; loader yalnızca `*Api` fonksiyonlarını çağırır.
+- `src/components/` — yinelenen UI blokları; mümkünse **tek dosya = tek ana bileşen** dışa aktarımı.
+- `src/context/` — auth, toast, tema gibi geniş bağlamlar.
+- `src/hooks/` — `use*` yardımcıları; yan etkilerde yine `api` çağrısı bu kurala uyar.
+- `src/lib/` — format, doğrulama yardımcıları, env güvenli okuma; ağ yok.
+- `src/data/` — statik/tohum verisi, mock; prod entegrasyonunda kaynak `api.ts` olur.
+- `src/types/` — kablo tipi, `PagedResult`, domain UI tipleri; backend Contracts ile uyum (`gulora-frontend-api.mdc`).
+
+## React Router v7
+- Route ağacı `App.tsx` veya `src/routes/` modülünde merkezileştirilsin; derin `path` zincirlerinde **layout route** (`Outlet`) ile hesap/sepet gibi ortak kabuklar yinelenmesin.
+- Sayfa düzeyinde `Suspense` + `lazy()` — ağır sayfalar için; fallback UI Tailwind ile yükleme iskeleti veya basit spinner.
+- URL parametreleri (`useParams`) ve sorgu dizesi (`useSearchParams`) — sunucu filtresi `api.ts` üzerinden; URL yalnızca UI state değil, backend ile aynı dil (ör. `page`, `pageSize`).
+
+## Teknoloji
+- **React 19** + **TypeScript**; sunucu state kütüphanesi eklenirse (ör. TanStack Query) merkezileştirme `api.ts` üzerinde kalmalıdır.
+- **Tailwind CSS v4:** utility-first; tasarım tokenları ve yinelenen stiller için `@theme` / bileşen sınıfları ile uyum; “ham” inline style yalnızca dinamik değerler için.
+
+## Hata sınırı ve veri yükleme (yüksek seviye)
+- Uygulama veya route kabuğunda **error boundary** ile yakalanmamış render hataları güvenli bir fallback ekranına düşer (tek tip UX). Sunucudan gelen veri için sayfa/route düzeyinde **`Suspense`** + anlamlı yükleme UI’si; veri çağrıları yalnızca `src/services/api.ts` (`gulora-frontend-api.mdc`).
+
+## İçe aktarma ve bağımlılık
+- Göreli yollar proje konvansiyonuna uygun (`../` derin zincirlerden kaçının); tip ve veri modelleri mümkünse `types/` veya `data/` modüllerinden.
+
+## Lint ve biçim
+- ESLint/Prettier proje kökünde tanımlıdır; PR öncesi `npm run lint` (ve varsa format kontrolü) yeşil olmalıdır — `gulora-devops-ci.mdc`.
+
+## İlgili kurallar
+- Backend çağrıları ve token: `gulora-frontend-api.mdc`
+- Genel stack ve proxy: `gulora-architecture.mdc`
+- Erişilebilirlik ve i18n: `gulora-frontend-a11y-i18n.mdc`
+- Frontend testler: `gulora-tests.mdc`

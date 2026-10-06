@@ -1,0 +1,1082 @@
+{
+  "info": {
+    "name": "Gülora API",
+    "description": "Gülora backend REST uçları. Ortam: **Gülora Local** (baseUrl). Önce **Login** veya **Register** çalıştırın; accessToken otomatik yazılır.\n\n- Admin/Seller uçları için JWT içinde ilgili rol gerekir.\n- `categoryId`, `productId`, `addressId`, `orderId` vb. ortam değişkenlerini gerçek GUID'lerle güncelleyin.\n- HTTPS geliştirme sertifikası için Postman Settings → SSL verification kapalı olabilir.\n- Collection Runner: klasör sırasına göre çalıştırın; bazı istekler veri/role gerektirir.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "7f8e9a12-b34c-4d56-a789-0123456789ab"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:7253"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Auth (anonymous)",
+      "item": [
+        {
+          "name": "POST Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/login",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"ChangeMe123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    if (j.accessToken) {",
+                  "      pm.collectionVariables.set('accessToken', j.accessToken);",
+                  "      pm.environment.set('accessToken', j.accessToken);",
+                  "    }",
+                  "    if (j.refreshToken) {",
+                  "      pm.collectionVariables.set('refreshToken', j.refreshToken);",
+                  "      pm.environment.set('refreshToken', j.refreshToken);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/register",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"ChangeMe123!\",\n  \"phoneNumber\": \"+994501234567\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  try {",
+                  "    const j = pm.response.json();",
+                  "    if (j.accessToken) {",
+                  "      pm.collectionVariables.set('accessToken', j.accessToken);",
+                  "      pm.environment.set('accessToken', j.accessToken);",
+                  "    }",
+                  "    if (j.refreshToken) {",
+                  "      pm.collectionVariables.set('refreshToken', j.refreshToken);",
+                  "      pm.environment.set('refreshToken', j.refreshToken);",
+                  "    }",
+                  "  } catch (e) {}",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/refresh",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/forgot-password",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/reset-password",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"paste-token-from-email\",\n  \"newPassword\": \"ChangeMe456!\",\n  \"confirmNewPassword\": \"ChangeMe456!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Verify email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/verify-email",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"paste-email-token\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST OTP send",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/otp/send",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+994501234567\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST OTP verify",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/otp/verify",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+994501234567\",\n  \"code\": \"123456\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Auth (Bearer)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "GET Auth/me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Auth/me",
+            "description": ""
+          }
+        },
+        {
+          "name": "POST Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Auth/logout",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Users (Bearer)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "GET Users/me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Users/me",
+            "description": ""
+          }
+        },
+        {
+          "name": "PUT Users/me",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Users/me",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"phoneNumber\": \"+994501234567\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST change-password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Users/me/change-password",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"ChangeMe123!\",\n  \"newPassword\": \"ChangeMe456!\",\n  \"confirmNewPassword\": \"ChangeMe456!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST addresses",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Users/me/addresses",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Ev\",\n  \"recipientName\": \"Test User\",\n  \"phoneNumber\": \"+994501234567\",\n  \"city\": \"Bakı\",\n  \"district\": \"Nəsimi\",\n  \"fullLine\": \"Örnek cadde 1\",\n  \"postalCode\": \"AZ1000\",\n  \"countryCode\": \"AZ\",\n  \"isDefault\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT addresses/:id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Users/me/addresses/{{addressId}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Ev\",\n  \"recipientName\": \"Test User\",\n  \"phoneNumber\": \"+994501234567\",\n  \"city\": \"Bakı\",\n  \"district\": \"Nəsimi\",\n  \"fullLine\": \"Örnek cadde 2\",\n  \"postalCode\": \"AZ1000\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE addresses/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Users/me/addresses/{{addressId}}",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Catalog (public)",
+      "item": [
+        {
+          "name": "GET Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Categories?onlyActive=true",
+            "description": ""
+          }
+        },
+        {
+          "name": "GET Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Products?page=1&pageSize=20",
+            "description": ""
+          }
+        },
+        {
+          "name": "GET Products/search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Products/search?query=g%C3%BCl&page=1&pageSize=20",
+            "description": ""
+          }
+        },
+        {
+          "name": "GET Products by slug",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Products/{{productSlug}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "GET Product reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Products/{{productId}}/reviews?page=1&pageSize=20",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Products (Admin/Seller Bearer)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "POST Products",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Products",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Örnek Ürün\",\n  \"slug\": \"ornek-urun-slug\",\n  \"price\": 29.99,\n  \"stockQuantity\": 100,\n  \"categoryId\": \"{{categoryId}}\",\n  \"description\": \"Açıklama\",\n  \"shortDescription\": \"Kısa\",\n  \"sku\": \"SKU-1\",\n  \"brand\": \"Marka\",\n  \"discountedPrice\": null,\n  \"isFeatured\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT Products/:id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Products/{{productId}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Örnek Ürün\",\n  \"slug\": \"ornek-urun-slug\",\n  \"description\": \"Güncel\",\n  \"shortDescription\": \"Kısa\",\n  \"brand\": \"Marka\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"isFeatured\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH Products/:id/price",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Products/{{productId}}/price",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 24.99,\n  \"discountedPrice\": 19.99\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Products/:id/images",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Products/{{productId}}/images",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/image.jpg\",\n  \"altText\": \"Ürün\",\n  \"displayOrder\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE Products/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Products/{{productId}}",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Reviews (customer Bearer)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "POST Product review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Products/{{productId}}/reviews",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"title\": \"Harika\",\n  \"body\": \"Çok memnun kaldım\",\n  \"orderId\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT Product review",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Products/{{productId}}/reviews/{{reviewId}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 4,\n  \"title\": \"İyi\",\n  \"body\": \"Güncellendi\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Categories (Admin Bearer)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "POST Categories",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Categories",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Çiçekler\",\n  \"slug\": \"cicekler\",\n  \"description\": null,\n  \"imageUrl\": null,\n  \"parentId\": null,\n  \"displayOrder\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT Categories/:id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Categories/{{categoryId}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Çiçekler\",\n  \"slug\": \"cicekler\",\n  \"description\": \"Detay\",\n  \"imageUrl\": null,\n  \"displayOrder\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE Categories/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Categories/{{categoryId}}",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Orders (Bearer)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "GET Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Orders?page=1&pageSize=20",
+            "description": ""
+          }
+        },
+        {
+          "name": "GET Orders/:id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Orders/{{orderId}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "POST Orders",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Orders",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"addressId\": \"{{addressId}}\",\n  \"deliveryType\": \"Standard\",\n  \"paymentMethod\": \"CashOnDelivery\",\n  \"items\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ],\n  \"couponCode\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Orders/:id/cancel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Orders/{{orderId}}/cancel",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Vazgeçtim\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Orders/:id/return",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Orders/{{orderId}}/return",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Hasarlı geldi\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST Orders/:id/complete-return [Admin/Seller]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Orders/{{orderId}}/complete-return",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"İade tamam\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Wishlist (Bearer)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "GET Wishlist",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Wishlist",
+            "description": ""
+          }
+        },
+        {
+          "name": "POST Wishlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Wishlist",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE Wishlist/:productId",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Wishlist/{{productId}}",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Notifications (Bearer)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "GET Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Notifications?page=1&pageSize=20&unreadOnly=false",
+            "description": ""
+          }
+        },
+        {
+          "name": "PATCH Notifications/read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Notifications/read",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notificationIds\": []\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Coupons (Bearer / Admin)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "GET Coupons/validate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Coupons/validate?code=YENI10&orderSubTotal=100",
+            "description": ""
+          }
+        },
+        {
+          "name": "POST Coupons [Admin]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Coupons",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"YENI10\",\n  \"type\": \"Percent\",\n  \"value\": 10,\n  \"description\": \"Hoş geldin\",\n  \"minOrderAmount\": null,\n  \"maxDiscountAmount\": null,\n  \"usageLimit\": 100,\n  \"startsAt\": null,\n  \"expiresAt\": null,\n  \"restrictedUserId\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE Coupons/:id [Admin]",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/Coupons/{{couponId}}",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Corporate & Seller (anonymous)",
+      "item": [
+        {
+          "name": "POST Corporate/inquiries",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Corporate/inquiries",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company\": \"ACME\",\n  \"contactName\": \"Ali\",\n  \"email\": \"ali@example.com\",\n  \"phone\": \"+994501234567\",\n  \"occasion\": \"Kurumsal hediye\",\n  \"quantity\": \"50\",\n  \"budget\": \"5000 AZN\",\n  \"message\": \"Teklif rica ederiz\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST seller-applications",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/seller-applications",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Satıcı Ad\",\n  \"company\": \"Ltd Şti\",\n  \"taxNumber\": \"1234567890\",\n  \"email\": \"seller@example.com\",\n  \"phone\": \"+994501234567\",\n  \"city\": \"Bakı\",\n  \"category\": \"Çiçek\",\n  \"message\": \"Başvuru\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Payments webhook (anonymous)",
+      "item": [
+        {
+          "name": "POST Payments/webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/Payments/webhook/{{webhookIdempotencyKey}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newStatus\": \"Completed\",\n  \"providerTransactionId\": \"prov-tx-1\",\n  \"failureReason\": null\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Admin (Bearer — Admin role)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{accessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "GET admin/reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/reviews?page=1&pageSize=20&status=Pending",
+            "description": ""
+          }
+        },
+        {
+          "name": "POST admin/reviews/:id/approve",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/reviews/{{reviewId}}/approve",
+            "description": ""
+          }
+        },
+        {
+          "name": "POST admin/reviews/:id/reject",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/reviews/{{reviewId}}/reject",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Kurallara aykırı\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET admin/users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/users?page=1&pageSize=20&search=&role=",
+            "description": ""
+          }
+        },
+        {
+          "name": "GET admin/orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/orders?page=1&pageSize=20",
+            "description": ""
+          }
+        },
+        {
+          "name": "GET admin/orders/:id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "PATCH admin/orders/:id/status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/status",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newStatus\": \"Processing\",\n  \"note\": \"Hazırlanıyor\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST admin/orders/:id/ship",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/orders/{{orderId}}/ship",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cargoCompany\": \"DHL\",\n  \"trackingNumber\": \"TRK123456\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT admin/coupons/:id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/coupons/{{couponId}}",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Güncel açıklama\",\n  \"minOrderAmount\": 50,\n  \"maxDiscountAmount\": 25,\n  \"usageLimit\": 200,\n  \"startsAt\": null,\n  \"expiresAt\": null,\n  \"isActive\": true\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

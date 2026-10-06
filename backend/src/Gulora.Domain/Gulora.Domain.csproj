@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Gulora.Domain</RootNamespace>
+    <AssemblyName>Gulora.Domain</AssemblyName>
+    <!-- Domain katmanında dış NuGet bağımlılığı yoktur. -->
+  </PropertyGroup>
+
+</Project>

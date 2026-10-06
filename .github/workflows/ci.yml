@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore backend/Gulora.sln
+
+      - name: Build
+        run: dotnet build backend/Gulora.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test backend/Gulora.sln -c Release --no-build --verbosity normal
+
+  frontend-store:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/store
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/store/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  frontend-seller:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/saller
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/saller/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

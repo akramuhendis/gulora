@@ -1,0 +1,115 @@
+---
+description: Gülora projesi genel Clean Architecture kuralları — her zaman uygulanır
+alwaysApply: true
+---
+
+# Gülora — Proje mimarisi
+
+## Stack
+- **Frontend:** React 19 + Vite 8 + TypeScript + Tailwind CSS v4 + React Router v7
+- **Backend:** ASP.NET Core 9 Web API + Clean Architecture + PostgreSQL
+- **Auth:** JWT (AccessToken 15 dk) + RefreshToken (DB, 7 gün) + BCrypt parola
+
+## Backend çözüm yapısı
+```
+Gülora.sln
+├── src/
+│   ├── Gulora.API/            ← Controllers, Middleware, Program.cs
+│   ├── Gulora.Application/    ← CQRS Commands/Queries, MediatR, FluentValidation
+│   ├── Gulora.Domain/         ← Entities, Value Objects, Domain Events, Enums
+│   ├── Gulora.Infrastructure/ ← EF Core, JWT, Email (MailKit), Payment
+│   └── Gulora.Contracts/      ← DTOs, Request/Response records
+└── tests/
+    ├── Gulora.Domain.Tests/
+    ├── Gulora.Application.Tests/
+    └── Gulora.Integration.Tests/
+```
+
+## Bağımlılık sırası
+- Domain → dış bağımlılık yok
+- Application → yalnızca Domain
+- Infrastructure → Domain + Application arayüzlerini uygular
+- API → Application + Infrastructure (DI kaydı)
+
+## Adlandırma kuralları
+| Tür | Biçim | Örnek |
+|-----|--------|--------|
+| Command | `{Action}{Entity}Command` | `CreateOrderCommand` |
+| Query | `Get{Entity}Query` | `GetProductBySlugQuery` |
+| Handler | `{Command/Query}Handler` | `CreateOrderCommandHandler` |
+| Validator | `{Command/Query}Validator` | `CreateOrderCommandValidator` |
+| Controller | `{Entity}Controller` | `OrdersController` |
+| DTO | `{Entity}Dto` | `OrderDto` |
+
+## API kök URL ve geliştirme entegrasyonu (tek anlam)
+
+- **Backend kök (ASP.NET):** route şablonu `api/v1/...` — tam örnek: `https://api.gulora.az/api/v1/orders`.
+- **Prod tarayıcı / mobil:** taban `https://api.gulora.az/api` + sürüm segmenti `v1` — endpoint yolu `/api/v1/...`.
+- **Yerel backend doğrudan:** `http://localhost:5284/api/v1/...` (port proje `launchSettings` ile uyumlu olabilir).
+
+**Frontend iki moddan birini seçer (aynı kod yolu ile uyum):**
+
+| Mod | `VITE_API_URL` (`.env.local`) | Vite `server.proxy` | Sonuç |
+|--------|------------------------------|----------------------|--------|
+| **A — göreli (geliştirme için önerilen)** | boş veya tanımlama | `/api` → `http://localhost:5284` | `request()` tabanı: `/api/v1` — tarayıcı isteği aynı origin’e gider, proxy backend’e iletir. |
+| **B — tam URL** | `http://localhost:5284/api/v1` | isteğe bağlı | Doğrudan backend’e istek; CORS ilkesi backend’de doğru olmalıdır. |
+
+- Sürümleme: **`/api/v1/`** URL segmenti (başlık tabanlı sürümleme yok).
+- `gulora-frontend-api.mdc` içindeki `BASE_URL` örneği bu tablolarla aynı felsefede tutulmalıdır.
+
+## API sürümü ve geriye dönük uyumluluk (yüksek seviye)
+- Şu an yol tabanlı **`v1`** standarttır; gelecekte **`v2`** ayrı URL segmenti (`/api/v2/...`) ile tanımlanır, istemci ve sözleşme birlikte güncellenir.
+- Kırıcı şema veya kontrat değişiklikleri: iki aşamalı dağıtım ve geri alma planı `gulora-devops-ci.mdc` ile uyumlu tutulur.
+- Eski uçların kademeli kaldırılması için HTTP **`Deprecation`** / **`Sunset`** başlıkları veya belgeli takvim tercih edilir — ayrıntı: `gulora-api-controllers.mdc`.
+
+## Gözlemlenebilirlik (yüksek seviye)
+- İstek başına **korelasyon / iz kimliği** (`Activity`, `HttpContext.TraceIdentifier` veya `X-Correlation-Id`) yapılandırılmış loglarda aynı alan adıyla kullanılır; PII/token loglanmaz (`gulora-security.mdc`).
+- İleride **OpenTelemetry** (trace/metric) ve merkezi log toplama eklenebilir; CI ve ortam değişkenleri `gulora-devops-ci.mdc`. Span/metric adlarında **servis + operasyon** tutarlı önek; kullanıcı kimliği span attribute olarak yazılmaz.
+
+## Gerçek zamanlı ileti (yüksek seviye)
+- **SignalR** veya WebSocket gerekirse hub uçları API katmanında ince kalır; bağlantı kimliği (JWT veya sunucu tarafı oturum) ve yetki **Application**’da tek kaynak; yoğun yayın/yeniden bağlanma Infrastructure’da ölçeklenir — ayrıntı API ve güvenlik kurallarıyla uyumlu tutulur.
+
+## Performans ve önbellek (yüksek seviye)
+- Liste ve arama uçlarında **`page` / `pageSize` üst sınırı** tek politika (`gulora-api-controllers.mdc`). GET yanıtlarında CDN ve tarayıcı için anlamlı **`Cache-Control` / ETag** (kullanıcıya özel veride `private` / kısa ömür) değerlendirilir.
+
+## Arka plan işleri (yüksek seviye)
+- `IHostedService`, kuyruk tüketicisi, outbox işleyici vb.: uzun süren **iş kuralı** Application/Domain’de kalır; Infrastructure yalnızca tetikleme, zamanlama ve dış sistem çağrısı yapar.
+- Tüm async yollar **`CancellationToken`** ile uyumlu olmalıdır (`gulora-csharp-backend.mdc`).
+
+## Frontend ↔ Backend entegrasyonu
+- `frontend/src/services/api.ts` tüm backend çağrılarını içerir (şimdilik stub aşaması olabilir; gerçek `fetch` aynı dosyada merkezileştirilmelidir).
+- Vite geliştirme proxy: `/api → http://localhost:5284` (`frontend/vite.config.ts` içinde `server.proxy`).
+- Auth token’ı `localStorage` + `Authorization: Bearer` başlığı ile yönetilir.
+
+## CI ve platform (yüksek seviye)
+- **CI:** `dotnet build` + tüm `Gulora.*.Tests` için `dotnet test`; `frontend` tarafında `npm ci`, `npm run build`, `npm run lint`; isteğe bağlı `dotnet format` / Prettier kontrolü — `gulora-devops-ci.mdc`. Vitest/Playwright eklendiğinde `gulora-tests.mdc`. Pipeline sırları için env / repo secrets.
+- **Migration:** yalnızca repodaki migration dosyaları ile; prod DB güncellemesi onaylı adım (`dotnet ef database update` veya idempotent dağıtım betiği) — ayrıntı: `gulora-devops-ci.mdc`.
+- **Sağlık:** API’de `/health` (gerekirse `/ready`) — `gulora-api-controllers.mdc`.
+- **OpenAPI:** geliştirme için Swagger, prod kısıtı — `gulora-api-controllers.mdc`.
+- **Dal, konteyner, GitHub Actions:** `gulora-devops-ci.mdc`.
+
+## `.cursor/rules` haritası
+| Dosya | İçerik |
+|------|--------|
+| `gulora-architecture.mdc` | Bu dosya — stack, çözüm yapısı, bağımlılık |
+| `gulora-csharp-backend.mdc` | Genel C#, async, nullable, logging, arka plan özeti |
+| `gulora-cqrs-patterns.mdc` | Application, MediatR, doğrulama, davranışlar |
+| `gulora-domain-entities.mdc` | Domain entity, enum, soft delete |
+| `gulora-api-controllers.mdc` | API, HTTP kodları, CORS, sayfalama, dil/ProblemDetails, önbellek, kullanımdan kaldırma |
+| `gulora-infrastructure-contracts.mdc` | EF Core, Contracts DTO, JWT, dosya/e-posta, ödeme özeti |
+| `gulora-tests.mdc` | Backend (xUnit) + frontend (Vitest/E2E) stratejisi |
+| `gulora-devops-ci.mdc` | CI/CD, migration dağıtımı, konteyner, dal |
+| `gulora-security.mdc` | Sırlar, HTTPS, CORS, rate limit, PII |
+| `gulora-frontend-api.mdc` | `api.ts`, token, proxy, tip uyumu |
+| `gulora-frontend-ui.mdc` | React UI, Tailwind, router, bileşen kuralları |
+| `gulora-frontend-a11y-i18n.mdc` | Erişilebilirlik, odak, i18n, `aria-*` |
+
+Proje kökünde **[AGENTS.md](../../AGENTS.md)** — ajanlar için kısa referans (bu tabloya bağlantılar).
+
+## Yollar ve glob’lar
+- Kurallardaki `globs` `backend/src/Gulora.*/**` yapısını bekler. Çözüm farklı klasördeyse (ör. yalnızca `src/`), hem çözüm yolu hem `.mdc` `globs` güncellenmeli ki ajan dosyayı açtığında doğru kural yüklensin.
+- **`gulora-csharp-backend.mdc`** genel C# için `backend/src`, `backend/tests` ve `**/Gulora.*.Tests/**` birlikte kapsanır — katmana özel kurallar (`API`, `Application` vb.) ile çelişki yoktur: daha dar glob ile dosya açıldığında hem genel hem uzman kural uygulanabilir (Cursor davranışına uygun tekrarı minimum tut).
+- Test projeleri için `gulora-tests.mdc` hem `**/Gulora.*.Tests/**`, hem frontend `*.test.*` / `e2e/` yollarını kapsar.
+
+## Güvenlik (özet)
+- Sırlar repoda değildir; prod HTTPS; PII/token loglanmaz. Ayrıntı: `gulora-security.mdc`.

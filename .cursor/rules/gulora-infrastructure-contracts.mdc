@@ -1,0 +1,50 @@
+---
+description: Gülora Infrastructure (EF Core, JWT, dış servisler) ve Contracts (DTO) kuralları
+globs: backend/src/Gulora.Infrastructure/**/*.cs,backend/src/Gulora.Contracts/**/*.cs
+alwaysApply: false
+---
+
+# Infrastructure + Contracts
+
+## Proje konumu
+- **Gulora.Contracts** — API’ye giren/çıkan tüm `record` DTO’lar, istek/yanıt modelleri, sayfalama sözleşmeleri. Domain entity doğrudan API’den dışa aktarılmaz.
+- **Gulora.Infrastructure** — EF Core, `DbContext`, repository uygulamaları, JWT token servisi, MailKit, ödeme sağlayıcıları, dosya depolama. Burada **iş kuralı yoktur** — yalnızca teknik uygulama ve entegrasyon.
+
+## Contracts
+- Adlandırma: `CreateOrderRequest`, `OrderDto`, `PagedResultDto` (veya projede seçilen tek biçim); backend ile uyumlu JSON adları için API projesinde **camelCase** serileştirme (ör. `System.Text.Json` + `PropertyNamingPolicy = JsonNamingPolicy.CamelCase`) bir kez yapılandırılır, Contracts tarafında C# özellikleri genelde PascalCase kalır.
+- **HTTP yüzeyi:** kablo formatı için yalnızca Contracts (veya ASP.NET yerleşik sayfalama parametreleri). Application `Command`/`Query` API projesinin dış sözleşmesi değildir — controller’da eşleme: `gulora-api-controllers.mdc`.
+- Commands/Queries’in kendi `record`’ları Application katmanındadır; **ortak yanıt/DTO** tekrarlanırsa Contracts’a taşınabilir.
+- Hiçbir Contracts dosyası Domain’e bağımlı olmamalıdır (yalnızca ilkel/Guid/string vb.).
+- **Para / hassasiyet (kablo):** `decimal` → JSON `number` ikili kesir hatalarına yol açabilir. Para ve kritik tutarlar için **minor birim** (`long` kuruş) veya **string** (`"12.34"`) gibi stabil format seçin ve frontend/backend’de aynı konvansiyonu koruyun; sıradan `decimal` yalnızca düşük riskli gösterimler için.
+
+## Infrastructure — EF Core
+- Tüm `IEntityTypeConfiguration<T>`, `DbContext`, migration’lar bu projededir.
+- **Domain entity** üzerinde EF attribute yok — yapılandırma `FluentAPI` ile `Infrastructure`’da.
+- `IRepository<T>` ve dış sistem arayüzleri **Application**’da tanımlanır; uygulama burada.
+- Migration: `dotnet ef migrations add PascalCaseAd --project ... --startup-project ...`
+- Ağır sorgular için gerekirse **ham SQL** veya ayrı okuma modelleri Infrastructure’da kalır; sonuç Contracts DTO veya Application eşlemesi ile UI’ya gider.
+
+## Ödeme ve dış çağrılar (yüksek seviye)
+- Ödeme ve kritik **POST** işlemlerinde mümkünse **idempotency key** (istemci veya sunucu üretimi) tekrarlı isteklerde çift tahsilatı önler; anahtar süresi ve depolama stratejisi takımca sabitlenir.
+- **Webhook** uçları: sağlayıcı imzasını veya paylaşılan sırrı doğrulayın; ham gövde ile imza kontrolü — `gulora-security.mdc`.
+
+## JWT ve parolalar
+- Parola asla loglanmaz; access token kısa ömürlü, refresh token DB + httpOnly cookie şeması API kurallarıyla uyumlu tutulur.
+- `JwtSecurityTokenHandler`, anahtarlar yalnızca yapılandırma (`IConfiguration`, user secrets / env) üzerinden.
+
+## DI kaydı
+- Extension metodlar: `AddInfrastructure(this IServiceCollection, IConfiguration)` API `Program.cs` içinde Application’dan sonra çağrılır.
+- Üçüncü parti SDK’lar (posta, ödeme) somut sınıflar Infrastructure’da, arayüzler Application’da.
+
+## Hata ve dayanıklılık
+- Dış HTTP çağrılarında **Polly** veya zaman aşımı / yeniden deneme ilkesi Infrastructure servislerinde; domain istisnaları Application/Domain tanımlar.
+
+## Dosya depolama ve e-posta (yüksek seviye)
+- Kullanıcı yüklemeleri: depolama yolu (disk, object storage), **imzalı URL** veya kısa ömürlü indirme token’ı, virus taraması entegrasyonu — teknik uygulama burada; politika (`gulora-security.mdc`).
+- **MailKit** / posta: şablonlar ve SMTP veya sağlayıcı çağrısı Infrastructure’da; aynı olayı iki kez iletmemek için **outbox**, kuyruk veya **idempotent** gönderim anahtarı tercih edilir (bildirim = tek teslimat semantiği).
+
+## İlgili kurallar
+- API seviyesi: `gulora-api-controllers.mdc`
+- Güvenlik (sırlar, CORS, rate limit): `gulora-security.mdc`
+- Test konteynerleri / DB: `gulora-tests.mdc`
+- Migration dağıtımı ve konteyner: `gulora-devops-ci.mdc`
